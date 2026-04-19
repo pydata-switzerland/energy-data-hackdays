@@ -10,87 +10,17 @@ from IPython.display import display
 # import seaborn as sns
 import plotly.express as px
 
+import sys
+
+sys.path.append(str((Path.cwd() / "OFEN-challenge").resolve()))
+
+from utils import load_and_clean_entsoe_data, import_ofen_data
+
 # %% [markdown]
-#  ## data import,  cleaning and preprocessing
+#  ## ENTSOE data import,  cleaning and preprocessing
 
-
-# import all csv files in the entsoe folder
-def load_and_clean_entsoe_data(
-    data_path: Path = Path("./OFEN-challenge/datasets/entsoe"),
-):
-
-    entsoe = [
-        pd.read_csv(file)
-        for file in data_path.iterdir()
-        if file.suffix == ".csv"
-    ]
-
-    # concatenate all datasets into one dataframe
-    entsoe_df = pd.concat(entsoe, ignore_index=True)
-
-    # make sure we are considering only CH
-    assert all(entsoe_df["Area"].unique() == "BZN|CH"), (
-        "Data contains areas other than CH"
-    )
-
-    # drop area since we are only looking at CH
-    entsoe_df.drop(columns=["Area"], inplace=True)
-
-    # convert generation to numeric
-    entsoe_df["Generation (MW)"] = pd.to_numeric(
-        entsoe_df["Generation (MW)"], errors="coerce"
-    )
-
-    # ## clean the UTC datetime column and convert to local time
-    # split the string and take the interval end in UTC
-    entsoe_df["MTU (UTC)"] = (
-        entsoe_df["MTU (UTC)"].dropna().apply(lambda x: x.split(" - ")[1])
-    )
-
-    # parse UTC and convert to Swiss local time (CET/CEST with DST)
-    entsoe_df["MTU (UTC)"] = pd.to_datetime(
-        entsoe_df["MTU (UTC)"], format="%d/%m/%Y %H:%M:%S", utc=True
-    )
-
-    # ## clean the CET/CEST datetime column and convert to local time
-    # split the string and take the interval end in CET/CEST
-    entsoe_df["MTU (CET/CEST)"] = (
-        entsoe_df["MTU (CET/CEST)"].dropna().apply(lambda x: x.split(" - ")[1])
-    )
-    # replace the ' (CET/CEST)' suffix with an empty string
-    entsoe_df["MTU (CET/CEST)"] = entsoe_df["MTU (CET/CEST)"].str.replace(
-        " (CET)", "", regex=False
-    )
-    entsoe_df["MTU (CET/CEST)"] = entsoe_df["MTU (CET/CEST)"].str.replace(
-        " (CEST)", "", regex=False
-    )
-
-    # convert to datetime without timezone (local time)
-    entsoe_df["MTU (CET/CEST)"] = pd.to_datetime(
-        entsoe_df["MTU (CET/CEST)"], format="%d/%m/%Y %H:%M:%S", errors="coerce"
-    )
-
-    # set only the missing CET/CEST datetimes
-    # to the converted datetimes from UTC to local time
-    dt_filter = entsoe_df["MTU (CET/CEST)"].isna()
-
-    entsoe_df.loc[dt_filter, "MTU (CET/CEST)"] = (
-        entsoe_df.loc[dt_filter, "MTU (UTC)"]
-        .dt.tz_convert("Europe/Zurich")
-        .dt.tz_localize(None)
-    )
-
-    # use local Swiss time as index
-    entsoe_df.set_index("MTU (CET/CEST)", inplace=True)
-
-    return entsoe_df
-
-
-# %%
 # %debug
 entsoe_df = load_and_clean_entsoe_data()
-
-# %%
 
 display(entsoe_df.head())
 
@@ -103,10 +33,68 @@ entsoe_df.info()
 entsoe_df.isnull().sum()
 
 
+# %% [markdown]
+# ### prepare data for comparison
+
+# sum over dayly generation by production type
+entsoe_daily_pivot = (
+    entsoe_df.groupby([pd.Grouper(freq="D"), "Production Type"])[
+        "Generation (MW)"
+    ]
+    .sum()
+    .reset_index()
+    .pivot(
+        index="MTU (CET/CEST)",
+        columns="Production Type",
+        values="Generation (MW)",
+    )
+) / 1000  # convert to GWh
+
+
+# sum all 'fossil' type into make a 'thermal' type, to match the OFEN dataset
+entsoe_daily_pivot["Thermal"] = entsoe_daily_pivot.loc[
+    :, entsoe_daily_pivot.columns.str.contains("Fossil")
+].sum(axis=1)
+
+# %%
+display(entsoe_daily_pivot.head())
+display(entsoe_daily_pivot.describe())
+entsoe_daily_pivot.info()
+
+# %% [markdown]
+# ## OFEN data import, cleaning and preprocessing
+
+ofen_df = import_ofen_data()
+
+display(ofen_df.head())
+display(ofen_df.describe())
+ofen_df.info()
+
+# %%
+# check overlap of production types between the two datasets
+
+overlap_types = list(
+    set(entsoe_df["Production Type"].unique())
+    & set(ofen_df["Energietraeger"].unique())
+)
+
+overlap_types
+
+# %%
+# pivot the OFEN dataset to have energy carrier as columns and date as index
+ofen_df_pivot = ofen_df.pivot(
+    columns="Energietraeger",
+    values="Produktion_GWh",
+)
+
+display(ofen_df_pivot.head())
+
 # %%
 # ## Exploratory data analysis
 
 
+# %% [markdown]
+# ### ENTSOE data exploration
 # %%
 # quick check of values counts for production type
 entsoe_df["Production Type"].value_counts()
@@ -137,5 +125,31 @@ fig = px.scatter(
 fig.update_traces(opacity=0.3)
 fig.update_traces(marker=dict(size=4))
 fig.show()
+
+# %% [markdown]
+# ### OFEN data exploration
+
+
+# %%
+# plot time series of generation by energy carrier
+fig = px.scatter(
+    data_frame=ofen_df,
+    x=ofen_df.index,
+    y="Produktion_GWh",
+    color="Energietraeger",
+)
+fig.update_traces(opacity=0.6)
+fig.update_traces(marker=dict(size=4))
+fig.show()
+
+# %%[markdown]
+# ###  plot diff time-series for shared common production types
+
+
+(entsoe_daily_pivot[overlap_types] - ofen_df_pivot[overlap_types]).plot(
+    subplots=True,
+    figsize=(12, 8),
+    title="Difference in generation between ENTSOE and OFEN datasets (GWh)",
+)
 
 # %%
