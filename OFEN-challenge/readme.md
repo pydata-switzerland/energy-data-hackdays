@@ -24,3 +24,12 @@ hidden button: select the country -> select table (not graph) -> click on 3 dots
 ### SFOE (OFEN)
 
 https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid/resource/0879ba1b-40ea-4e26-bba0-9cbb339f577e
+
+
+## Questions on data
+
+* how are ENTSO data created? 
+* how are SFOE data created?
+* check the map between production types in ENTSO and SFOE datasets
+* meaning of 'thermal' in SFOE dataset
+* meaning of 'other' in ENTSO dataset
