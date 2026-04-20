@@ -3,7 +3,6 @@
 
 # %% [markdown]
 # ## import libraries
-import pandas as pd
 from pathlib import Path
 from IPython.display import display
 
@@ -14,12 +13,20 @@ import sys
 
 sys.path.append(str((Path.cwd() / "OFEN-challenge").resolve()))
 
-from utils import load_and_clean_entsoe_data, import_ofen_data
+# %load_ext autoreload
+# %autoreload 1
+# %aimport utils
+
+
+from utils import (
+    load_and_clean_entsoe_data,
+    import_ofen_data,
+    prepare_entsoe_for_comparison,
+)
 
 # %% [markdown]
 #  ## ENTSOE data import,  cleaning and preprocessing
 
-# %debug
 entsoe_df = load_and_clean_entsoe_data()
 
 display(entsoe_df.head())
@@ -31,32 +38,16 @@ entsoe_df.info()
 
 # show N nulls
 entsoe_df.isnull().sum()
+print(entsoe_df.index.isnull().sum())  # check for nulls in index
 
+
+entsoe_df["Production Type"].value_counts()
 
 # %% [markdown]
 # ### prepare data for comparison
 
-# sum over dayly generation by production type
-entsoe_daily_pivot = (
-    entsoe_df.groupby([pd.Grouper(freq="D"), "Production Type"])[
-        "Generation (MW)"
-    ]
-    .sum()
-    .reset_index()
-    .pivot(
-        index="MTU (CET/CEST)",
-        columns="Production Type",
-        values="Generation (MW)",
-    )
-) / 1000  # convert to GWh
+entsoe_daily_pivot = prepare_entsoe_for_comparison(entsoe_df)
 
-
-# sum all 'fossil' type into make a 'thermal' type, to match the OFEN dataset
-entsoe_daily_pivot["Thermal"] = entsoe_daily_pivot.loc[
-    :, entsoe_daily_pivot.columns.str.contains("Fossil")
-].sum(axis=1)
-
-# %%
 display(entsoe_daily_pivot.head())
 display(entsoe_daily_pivot.describe())
 entsoe_daily_pivot.info()
@@ -81,7 +72,8 @@ overlap_types = list(
 overlap_types
 
 # %%
-# pivot the OFEN dataset to have energy carrier as columns and date as index
+# pivot the OFEN dataset to have energy carrier as columns
+# and date as index
 ofen_df_pivot = ofen_df.pivot(
     columns="Energietraeger",
     values="Produktion_GWh",
@@ -106,7 +98,7 @@ fig = px.histogram(
     entsoe_df.dropna(),
     x="Generation (MW)",
     color="Production Type",
-    # marginal="box",
+    marginal="box",
     nbins=100,
     opacity=0.7,
     histnorm="density",
@@ -142,14 +134,29 @@ fig.update_traces(opacity=0.6)
 fig.update_traces(marker=dict(size=4))
 fig.show()
 
-# %%[markdown]
+# %% [markdown]
 # ###  plot diff time-series for shared common production types
 
 
-(entsoe_daily_pivot[overlap_types] - ofen_df_pivot[overlap_types]).plot(
-    subplots=True,
-    figsize=(12, 8),
-    title="Difference in generation between ENTSOE and OFEN datasets (GWh)",
+# %%
+
+diff_df = entsoe_daily_pivot[overlap_types] - ofen_df_pivot[overlap_types]
+
+# melt for easier plotting with plotly
+diff_melted = diff_df.reset_index().melt(
+    id_vars="MTU (CET/CEST)",
+    var_name="Production Type",
+    value_name="Difference (GWh)",
 )
 
+diff_melted.head()
+
+# %%
+px.scatter(
+    diff_melted,
+    x="MTU (CET/CEST)",
+    y="Difference (GWh)",
+    color="Production Type",
+    title="Difference in generation between ENTSOE and OFEN datasets (GWh)",
+).update_traces(opacity=0.6, marker=dict(size=4)).show()
 # %%

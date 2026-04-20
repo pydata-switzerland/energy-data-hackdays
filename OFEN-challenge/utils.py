@@ -70,13 +70,17 @@ def load_and_clean_entsoe_data(
     dt_filter = entsoe_df["MTU (CET/CEST)"].isna()
 
     entsoe_df.loc[dt_filter, "MTU (CET/CEST)"] = (
-        entsoe_df.loc[dt_filter, "MTU (UTC)"]
+        entsoe_df
+        .loc[dt_filter, "MTU (UTC)"]
         .dt.tz_convert("Europe/Zurich")
         .dt.tz_localize(None)
     )
 
     # use local Swiss time as index
     entsoe_df.set_index("MTU (CET/CEST)", inplace=True)
+
+    # we can drop the UTC column since we have the local time column now
+    entsoe_df.drop(columns=["MTU (UTC)"], inplace=True)
 
     return entsoe_df
 
@@ -100,16 +104,43 @@ def import_ofen_data(
     ofen_df.set_index("Datum", inplace=True)
 
     # map OFEN / german names to entsoe / english names for easier comparison and analysis
-    ofen_df["Energietraeger"] = ofen_df["Energietraeger"].map(
-        {
-            "Flusskraft": "Hydro Water Reservoir",
-            "Kernkraft": "Nuclear",
-            "Speicherkraft": "Storage",  #  only Hydro Pumped Storage ???
-            "Photovoltaik": "Solar",
-            "Wind": "Wind Onshore",
-            "Thermische": "Thermal",  # only fossil fuel ???
-        }
-    )
+    ofen_df["Energietraeger"] = ofen_df["Energietraeger"].map({
+        "Flusskraft": "Hydro Water Reservoir",
+        "Kernkraft": "Nuclear",
+        "Speicherkraft": "Storage",  #  only Hydro Pumped Storage ???
+        "Photovoltaik": "Solar",
+        "Wind": "Wind Onshore",
+        "Thermische": "Thermal",  # only fossil fuel ???
+    })
     ofen_df["Energietraeger"].value_counts()
 
     return ofen_df
+
+
+def prepare_entsoe_for_comparison(entsoe_df: pd.DataFrame) -> pd.DataFrame:
+    """Prepare the ENTSOE data for comparison with the OFEN data.
+    Args:
+        entsoe_df (pd.DataFrame): cleaned ENTSOE data, as returned by load_and_clean_entsoe_data()
+    Returns:
+        pd.DataFrame: ENTSOE data pivoted to have energy carrier as columns and date as index
+    """
+
+    # sum over daily generation by production type
+    entsoe_daily_pivot = (
+        entsoe_df
+        .groupby([pd.Grouper(freq="D"), "Production Type"])["Generation (MW)"]
+        .sum()
+        .reset_index()
+        .pivot(
+            index="MTU (CET/CEST)",
+            columns="Production Type",
+            values="Generation (MW)",
+        )
+    ) / 1000  # convert to GWh
+
+    # sum all 'fossil' type into make a 'thermal' type, to match the OFEN dataset
+    entsoe_daily_pivot["Thermal"] = entsoe_daily_pivot.loc[
+        :, entsoe_daily_pivot.columns.str.contains("Fossil")
+    ].sum(axis=1)
+
+    return entsoe_daily_pivot
