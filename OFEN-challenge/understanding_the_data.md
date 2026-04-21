@@ -23,6 +23,49 @@ profiles can be scaled or adjusted to match SFOE's daily totals. The challenge
 is to ensure that the resulting time series is both physically plausible and
 methodologically transparent.*
 
+## Data description
+
+## SFOE
+
+Source : https://www.energiedashboard.admin.ch/strom/produktion
+
+The _power production_ figures available through SFOE's (Swiss Federal Office of Energy) energy dashboard (across multiple technologies such as hydro, nuclear, thermal, wind and PV) are reportedly aggregated **daily** data.[^0]  The data are publicly accessible via (opendata.swiss)[opendata.swiss] [^1][^2] in the form of comma-separated-values[^3].  The _provider_ of the data, however, is Swissgrid.[^4]  
+
+### Swissgrid
+
+Description from
+[www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads)
+
+> The total of the produced energy in the control block Switzerland.
+> The aggregations of the feed-in sequences for the balancing groups
+> are sent from the distribution network operators to Swissgrid.
+> The sum contains all the energy produced and fed in the network.
+> (Only productions plants equipped with load profile meters)
+
+Looking closer at the data provided by Swissgrid
+in form of Excel spreadsheets [^5]
+their _original_ temporal resolution is **every 15'**[^6].
+
+Some example statistics from the 2026 data (downloaded on April 21)
+after manually extracting the energy production time series
+from the _Zeitreihen0h15_ sheet
+(starting from `01.01.2026 00:00` up to `31.03.2026 23:45`,
+here saved as : `total_energy_production_swissgrid.csv`) :
+
+[^5]:
+[^6]:
+
+
+``` bash
+mlr --c2p --ofmt '%.2f' \
+put '$MWh = $kWh / 1000' \
+then stats1 -a sum,median,mean,stddev,mad -f MWh \
+total_energy_production_swissgrid.csv
+
+MWh_sum     MWh_median MWh_mean MWh_stddev MWh_mad
+13100359.20 1375.90    1516.95  573.90     471.09
+```
+
 ## Get the data
 
 First, let's retrieve small samples of the data.
@@ -35,13 +78,13 @@ The data :
 
 and a quick-look on the downloaded data
 
-```
+``` bash
 mlr --csv head -n 3 ogd104_stromproduktion_swissgrid.csv
 ```
 
 returns
 
-```
+``` csv
 Datum,Energietraeger,Produktion_GWh
 2015-01-01,Flusskraft,22.6
 2015-01-01,Kernkraft,79.6
@@ -60,13 +103,13 @@ Output `stromproduktion.csv`
 
 Following, let's retrieve daily electricity production totals for 2026
 
-```
+``` bash
 curl -s -X 'GET'   'https://energiedashboard.ch/api/v1/datasets/stromproduktion-swissgrid/data?from=2026-01-01&offset=0&limit=1000'   -H 'accept: application/json'   > stromproduktion.json
 ```
 
 and peak
 
-```
+``` bash
 mlr --ijson head stromproduktion.json
 ```
 
@@ -76,7 +119,7 @@ _This will return a large one-liner_ :
 
 Now, convert to CSV : 
 
-```
+``` bash
 mlr --ijson put '
   for (k,v in $data) {
     @row = v;
@@ -102,7 +145,7 @@ Output : `stromproduktion_2026_01_GWh.csv`
 
 ---
 
-```
+``` bash
 mlr --csv \
 stats1 -a sum -f Produktion_GWh  -g energietraeger \
 then sort -f energietraeger \
@@ -111,7 +154,7 @@ stromproduktion.csv
 
 returns
 
-```
+``` csv
 energietraeger,Produktion_GWh_sum
 Flusskraft,3268.4999999999995
 Kernkraft,5864.4
@@ -123,7 +166,7 @@ Wind,57.30000000000002
 
 and
 
-```
+``` bash
 mlr --csv \
 filter '$Datum =~ "2026"' \
 then stats1 -a sum -f Produktion_GWh -g Energietraeger \
@@ -145,7 +188,7 @@ Wind,57.300000000000004
 
 Actually save output to a new file
 
-```
+``` bash
 mlr --csv \
 stats1 -a sum -f Produktion_GWh  -g energietraeger \
 then sort -f energietraeger \
@@ -165,7 +208,7 @@ Output : `entsoe_GWh.csv`
 
 Extract all about Switzerland
 
-```
+``` bash
 mlr --csv \
 stats1 -a sum -f ActualGenerationOutput[MW] -g ProductionType \
 then put '$Production_GWh = ${ActualGenerationOutput[MW]_sum} / 1000'  \
@@ -175,7 +218,7 @@ then cut -f ProductionType,Production_GWh 2026_01_AggregatedGenerationPerType_16
 
 Map SFOE to ENTSOE _Production Type_
 
-```
+``` bash
 mlr --csv put '
   begin {
     @map["Hydro Pumped Storage"] = "Speicherkraft";
@@ -194,7 +237,7 @@ then rename ProductionType,Type \
 
 Print to verify output
 
-```
+``` bash
 mlr --c2p --ofmt '%.2f' cat entsoe_GWh.csv
 ```
 
@@ -216,7 +259,7 @@ and verify they refer to the same quantities.
 
 Let's generate a file for all production types (?)
 
-```
+``` bash
 mlr --csv \
 join --lp Daily_ --rp Hourly_ -j Type -r MatchType -f stromproduktion_2026_01_GWh.csv entsoe_GWh.csv \
 |mlr --csv reorder -f Type,Hourly_Type,Daily_Production_GWh,Hourly_Production_GWh \
@@ -230,7 +273,7 @@ then put '
 
 Now print
 
-```
+``` bash
 mlr --csv cat type_and_production.csv
 ```
 
@@ -246,7 +289,7 @@ Wind,Wind Onshore,17.999999999999996,17.98906078800001,0.010939211999986043,0.06
 
 or prettier print via `--c2p`
 
-```
+``` bash
 mlr --c2p cat type_and_production.csv
 ```
 
@@ -264,7 +307,7 @@ Wind          Wind Onshore                    17.999999999999996   17.9890607880
 
 or in Markdown
 
-```
+``` bash
 mlr --csv --omd --ofmt '%.2f' cat type_and_production.csv
 ```
 
@@ -294,7 +337,7 @@ Output : `type_and_production_Speicherkraft_Hourly_Production.csv`
 
 Genrate the data
 
-```
+``` bash
 mlr --csv filter '$SFOE_Type == "Speicherkraft"' \
 then stats1 -a sum -f Hourly_Production_GWh -g SFOE_Type \
 then put '$ENTSOE_Type = "Hydro: Pumped Storage + Water Reservoir"' \
@@ -306,7 +349,7 @@ type_and_production.csv \
 
 and print
 
-```
+``` bash
 mlr --c2p --ofmt '%.2f' cat type_and_production_Speicherkraft_Hourly_Production.csv
 ```
 
@@ -328,15 +371,15 @@ Output : `type_and_production_without_Speicherkraft`
 
 Generate the wanted CSV file
 
-```
+``` bash
 mlr --csv filter '$SFOE_Type != "Speicherkraft"' \
 type_and_production.csv \
 > type_and_production_without_Speicherkraft.csv
 ```
 
 and print via
-```
 
+``` bash
 mlr --c2p --ofmt '%.2f' cat type_and_production_without_Speicherkraft.csv
 ```
 
@@ -364,7 +407,7 @@ Hence, we need to get the `DailyProduction_GWh` column back in manually !
 
 Genrate a "join"ed CSV file
 
-```
+``` bash
 mlr --csv then join --lk "Daily_Production_GWh" -j SFOE_Type -f type_and_production.csv type_and_production_Speicherkraft_Hourly_Production.csv \
 | mlr --csv head -n 1   then put '
   $Difference = $Daily_Production_GWh - $Hourly_Production_GWh_sum;
@@ -376,7 +419,7 @@ then reorder -f SFOE_Type,ENTSOE_Type > type_and_production_only_Speicherkraft.c
 
 and print
 
-```
+``` bash
 mlr --c2p --ofmt '%.2f' cat type_and_production_only_Speicherkraft.csv
 ```
 
@@ -396,7 +439,7 @@ Output : `type_and_production_harmonised.csv`
 
 Generate the "final" CSV file `type_and_production_harmonised.csv`
 
-```
+``` bash
 mlr --csv cat \
 then sort -f SFOE_Type \
 type_and_production_without_Speicherkraft.csv \
@@ -406,7 +449,7 @@ type_and_production_only_Speicherkraft.csv \
 
 and print it
 
-```
+``` bash
 mlr --c2p --ofmt '%.2f' --omd cat type_and_production_harmonised.csv
 ```
 
@@ -418,3 +461,14 @@ mlr --c2p --ofmt '%.2f' --omd cat type_and_production_harmonised.csv
 | Photovoltaik | Solar | 205.90 | 78.36 | 127.54 | 61.95 |
 | Speicherkraft | Hydro: Pumped Storage + Water Reservoir | 2177.10 | 1743.02 | 434.08 | 19.94 |
 | Wind | Wind Onshore | 18.00 | 17.99 | 0.01 | 0.06 |
+
+
+## References
+
+[^0]: https://www.energiedashboard.admin.ch/strom/produktion
+[^1]: https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid
+[^2]: https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid/resource/0879ba1b-40ea-4e26-bba0-9cbb339f577e
+[^3]: https://www.bfe-ogd.ch/ogd104_stromproduktion_swissgrid.csv
+[^4]: https://www.swissgrid.ch/en/home/operation/grid-data/generation.html
+[^5]: https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads
+[^6]: Example Excel file [www.swissgrid.ch/dam/jcr:805e525c-44fe-4701-a227-6144193257ac/EnergieUebersichtCH_2026.xlsx](https://www.swissgrid.ch/dam/jcr:805e525c-44fe-4701-a227-6144193257ac/EnergieUebersichtCH_2026.xlsx)
