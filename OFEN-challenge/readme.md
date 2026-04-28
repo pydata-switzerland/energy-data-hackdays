@@ -25,6 +25,12 @@ hidden button: select the country -> select table (not graph) -> click on 3 dots
 
 https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid/resource/0879ba1b-40ea-4e26-bba0-9cbb339f577e
 
+### Energy-charts.info
+
+a very useful project , by Fraunhofer ISE, is https://energy-charts.info/
+and in particular [power generation for CH](https://energy-charts.info/charts/power/chart.htm?l=en&c=CH&interval=year&source=entsoe_bfe) , where you can select the source of data (ENTSO or SFOE) and compare them.
+
+In particular, see https://energy-charts.info/explanations.html?l=en&c=CH for some notes on the discrepancies between the two datasets.
 
 ## Questions on data
 
