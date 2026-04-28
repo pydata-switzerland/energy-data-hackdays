@@ -1,0 +1,16 @@
+#!/bin/bash
+mlr --csv --ofmt '%.2f' \
+label \
+Date,"ENTSOE Pumped","ENTSOE Run-of-river","ENTSOE Reservoir","ENTSOE Nuclear","ENTSOE Solar","ENTSOE Wind","SFOE Flusskraft","SFOE Kernkraft","SFOE Photovoltaik","SFOE Speicherkraft","SFOE Thermische","SFOE Wind" \
+then reorder \
+-f Date,"SFOE Kernkraft","ENTSOE Nuclear","SFOE Photovoltaik","ENTSOE Solar","SFOE Wind","ENTSOE Wind","SFOE Flusskraft","ENTSOE Run-of-river","SFOE Speicherkraft","ENTSOE Reservoir","SFOE Thermische" \
+then put '
+#   $Kernkraft = ${SFOE Kernkraft} - ${ENTSOE Nuclear};
+#   $Photovoltaik = ${SFOE Photovoltaik} - ${ENTSOE_Solar};
+#   $Wind = ${ENTSOE Wind} - ${SFOE Wind};
+#   $Flusskraft = ${SFOE Flusskraft} - ${ENTSOE Run-of-river};
+#   $Speicherkraft = ${SFOE Speicherkraft} - ${ENTSOE Reservoir};
+# ' \
+then reorder \
+-f Date,"SFOE Kernkraft","ENTSOE Nuclear",Kernkraft,"SFOE Photovoltaik","ENTSOE Solar",Photovoltaik,"SFOE Wind","ENTSOE Wind",Wind,"SFOE Flusskraft","ENTSOE Run-of-river",Flusskraft,"SFOE Speicherkraft","ENTSOE Reservoir",Speicherkraft \
+generation_per_type_2026_01.csv
