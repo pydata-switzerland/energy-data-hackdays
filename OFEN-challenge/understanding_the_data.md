@@ -1,14 +1,18 @@
 # Electricity production data
 
+> **Under heavy development !**
+
+---
+
 Prototyping to understand the data for the challenge
 owned by the Swiss Federal Office of Energy (SFOE).
 
-See also : [https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland](https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland)
 
+## The challenge
 
-## Challenge description
-
+> From [https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland](https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland)
 *The Swiss Federal Office of Energy currently publishes electricity production
+
 data on a daily level across multiple technologies such as hydro, nuclear,
 thermal, wind and PV. However, with the increasing share of renewable and
 variable energy sources, hourly resolution becomes crucial to better understand
@@ -23,17 +27,23 @@ profiles can be scaled or adjusted to match SFOE's daily totals. The challenge
 is to ensure that the resulting time series is both physically plausible and
 methodologically transparent.*
 
-## Data description
+## Data
 
-## SFOE
+### SFOE
 
-Source : https://www.energiedashboard.admin.ch/strom/produktion
+> Source : https://www.energiedashboard.admin.ch/strom/produktion
 
-The _power production_ figures available through SFOE's (Swiss Federal Office of Energy) energy dashboard (across multiple technologies such as hydro, nuclear, thermal, wind and PV) are reportedly aggregated **daily** data.[^0]  The data are publicly accessible via (opendata.swiss)[opendata.swiss] [^1][^2] in the form of comma-separated-values[^3].  The _provider_ of the data, however, is Swissgrid.[^4]  
+The _power production_ figures available through SFOE's
+(Swiss Federal Office of Energy) energy dashboard 
+(across multiple technologies such as hydro, nuclear, thermal, wind and PV)
+are reportedly aggregated **daily** data.[^0]
+The data are publicly accessible via (opendata.swiss)[opendata.swiss] [^1][^2]
+in the form of comma-separated-values[^3].
+The _provider_ of the data, however, is Swissgrid.[^4]  
 
 ### Swissgrid
 
-Description from
+> Description from
 [www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads)
 
 > The total of the produced energy in the control block Switzerland.
@@ -45,6 +55,8 @@ Description from
 Looking closer at the data provided by Swissgrid
 in form of Excel spreadsheets [^5]
 their _original_ temporal resolution is **every 15'**[^6].
+
+#### Sample statistics
 
 Some example statistics from the 2026 data (downloaded on April 21)
 after manually extracting the energy production time series
@@ -103,7 +115,7 @@ Following, let's retrieve daily electricity production totals for 2026
 curl -s -X 'GET'   'https://energiedashboard.ch/api/v1/datasets/stromproduktion-swissgrid/data?from=2026-01-01&offset=0&limit=1000'   -H 'accept: application/json'   > stromproduktion.json
 ```
 
-and peak
+and take a look at
 
 ``` bash
 mlr --ijson head stromproduktion.json
@@ -113,7 +125,9 @@ _This will return a large one-liner_ :
 
 `data.1.datum=2026-03-13,data.1.energietraeger=Thermische,data.1.produktion_gwh=8.6,...`
 
-Now, convert to CSV : 
+### Convert data to CSV
+
+Now, convert `stromproduktion.json` to CSV (new file named `stromproduktion.csv`) : 
 
 ``` bash
 mlr --ijson put '
@@ -129,17 +143,12 @@ stromproduktion.json \
 > stromproduktion.csv
 ```
 
-and _compare_ with the manually downloaded sample data,
+We _compare_ the Web-API retrieved data
+`stromproduktion.csv`
+to the manually downloaded sample data
+`ogd104_stromproduktion_swissgrid.csv`,
 to ensure we have the same numbers,
 i.e. no errors during the JSON
-
-### Convert data to CSV
-
----
-Input : `stromproduktion_2026_01.csv`  
-Output : `stromproduktion_2026_01_GWh.csv`
-
----
 
 ``` bash
 mlr --csv \
@@ -182,6 +191,26 @@ Thermische,1152.1000000000004
 Wind,57.300000000000004
 ```
 
+### Convert unit/s to GWh
+
+---
+Input : `stromproduktion.csv`  
+Intermediate : `stromproduktion_2026_01.csv`  
+Output : `stromproduktion_2026_01_GWh.csv`
+
+---
+
+For practical reasons, we can work with a smaller sample,
+i.e. the January 2026 data.
+
+``` bash
+mlr --csv \
+sort -f datum \
+then filter '$datum =~ "2026-01"' \
+stromproduktion.csv \
+> stromproduktion_2026_01.csv
+```
+
 Actually save output to a new file
 
 ``` bash
@@ -189,28 +218,59 @@ mlr --csv \
 stats1 -a sum -f Produktion_GWh  -g energietraeger \
 then sort -f energietraeger \
 then label Type,Production_GWh \
-stromproduktion_2026_01.csv \
+stromproduktion_2026_01.csv  
 > stromproduktion_2026_01_GWh.csv
 ```
 
-### Focus on Switzerland
+### ENTSO-E
+
+The full directory of the ENTSO-E data
+can be fetched from the **File Library** of the Transparency Platform :
+
+    File Browser Mode > TP_export > AggregatedGenerationPerType_16.1.B_C_r3
+
+These files are (TSV and not CSV, yet they are)
+consistent in terms of their header, i.e.
+
+``` bash
+DateTime(UTC)	ResolutionCode	AreaCode	AreaDisplayNameAreaTypeCode	AreaMapCode	ProductionType	ActualGenerationOutput[MW]	ActualConsumption[MW]	UpdateTime(UTC)
+```
+
+In addition, the timestamps are all in UTC.
+While the downloaded `.zip` file
+(which is the complete folder with monthly time series per file)
+is larg (~690MB) and needs some filtering to extract data for Switzerland.
+Yet it is perhaps cleaner than the files downloaded via interactive map
+(@ https://transparency.entsoe.eu/generation/actual/perType/generation?appState=%7B%22sa%22%3A%5B%22BZN%7C10YGR-HTSO-----Y%22%5D%2C%22st%22%3A%22BZN%22%2C%22mm%22%3Atrue%2C%22ma%22%3Afalse%2C%22sp%22%3A%22HALF%22%2C%22dt%22%3A%22CHART%22%2C%22df%22%3A%5B%222026-04-30%22%2C%222026-04-30%22%5D%2C%22tz%22%3A%22UTC%22%7D).
 
 ---
-Input : `2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv`  
+Input : `2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode.csv`  
 Intermediate : `2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH_GWh.csv`  
 Output : `entsoe_GWh.csv`
 
 ---
 
-Extract all about Switzerland
+Extract data for Switzerland
+
+``` bash
+mlr --t2c \
+filter '$AreaMapCode == "CH"' \
+then cat 2026_01_AggregatedGenerationPerType_16.1.B_C_r3.csv \
+> 2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv
+```
+
+and convert units to GWh
 
 ``` bash
 mlr --csv \
 stats1 -a sum -f ActualGenerationOutput[MW] -g ProductionType \
 then put '$Production_GWh = ${ActualGenerationOutput[MW]_sum} / 1000'  \
-then cut -f ProductionType,Production_GWh 2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv \
+then cut -f ProductionType,Production_GWh \
+2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv \
 > 2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH_GWh.csv
 ```
+
+## Link SFOE to ENTSO-E data
 
 Map SFOE to ENTSOE _Production Type_
 
@@ -491,7 +551,6 @@ The daily time series from SFOE is the "truth" reference.
 Let's aggregate the ENTSO-E data from hourly to daily and compare the sums for
 each type.
 
-
 ```
 mlr --c2p cat entsoe_generation_per_type_2026_01_daily.csv
 ```
@@ -665,7 +724,6 @@ mlr --c2m cat entsoe_generation_per_type_2026_01_daily_scaled.csv
 
 
 
-
 ```
 mlr --csv put '@dt = strptime($DateTime, "%Y-%m-%d %H:%M:%S"); $Date = strftime(@dt, "%Y-%m-%d")' entsoe_generation_per_type_2026_01_daily_scaled.csv |mlr --csv stats1 -a sum --grfx "Date$" | mlr --c2x --ofmt '%.2f' cat
 ```
@@ -696,7 +754,6 @@ Total_ENTSOE_sum                    3209.45
 Total_SFOE_sum                      4561.20
 Total_Scale_sum                     43.33
 ```
-
 
 ## References
 
