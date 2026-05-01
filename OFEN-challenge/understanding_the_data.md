@@ -1,5 +1,45 @@
 # Electricity production data
 
+<!-- vim-markdown-toc Marked -->
+
+* [The challenge](#the-challenge)
+* [The Data](#the-data)
+    * [SFOE](#sfoe)
+        * [Swissgrid time series](#swissgrid-time-series)
+            * [Sample statistics](#sample-statistics)
+    * [ENTSO-E](#entso-e)
+* [Get the data](#get-the-data)
+    * [SFOE](#sfoe)
+        * [Download CSV data](#download-csv-data)
+        * [Get JSON data via the Web API](#get-json-data-via-the-web-api)
+            * [Get JSON data](#get-json-data)
+            * [Convert JSON to CSV](#convert-json-to-csv)
+        * [Verify integrity ?](#verify-integrity-?)
+        * [Work with a sample ?](#work-with-a-sample-?)
+        * [Convert to wide table](#convert-to-wide-table)
+    * [ENTSO-E](#entso-e)
+        * [Manual download](#manual-download)
+        * [Extract data for Switzerland](#extract-data-for-switzerland)
+        * [Convert MWh to GWh](#convert-mwh-to-gwh)
+        * [Convert to wide table](#convert-to-wide-table)
+            * [Diagnose the data structure](#diagnose-the-data-structure)
+            * [Unsparsify the data](#unsparsify-the-data)
+            * [Reshape to wide table](#reshape-to-wide-table)
+* [SFOE vs ENTSOE](#sfoe-vs-entsoe)
+    * [Link SFOE and ENTSO-E data](#link-sfoe-and-entso-e-data)
+        * [Electricity generation types](#electricity-generation-types)
+        * [Mapping ENTSO-E to SFOE types](#mapping-entso-e-to-sfoe-types)
+    * [Further _cleaning_](#further-_cleaning_)
+        * ["Speicherkraft" production](#"speicherkraft"-production)
+        * [Production without "Speicherkraft"](#production-without-"speicherkraft")
+        * [Restore lost field `DailyProduction_GWh`](#restore-lost-field-`dailyproduction_gwh`)
+    * [Combine in one data file](#combine-in-one-data-file)
+* [Compare hourly to daily](#compare-hourly-to-daily)
+* [Unsorted...](#unsorted...)
+* [References](#references)
+
+<!-- vim-markdown-toc -->
+
 > **Under heavy development !**
 
 ---
@@ -27,7 +67,7 @@ profiles can be scaled or adjusted to match SFOE's daily totals. The challenge
 is to ensure that the resulting time series is both physically plausible and
 methodologically transparent.*
 
-## Data
+## The Data
 
 ### SFOE
 
@@ -39,9 +79,12 @@ The _power production_ figures available through SFOE's
 are reportedly aggregated **daily** data.[^0]
 The data are publicly accessible via (opendata.swiss)[opendata.swiss] [^1][^2]
 in the form of comma-separated-values[^3].
-The _provider_ of the data, however, is Swissgrid.[^4]  
+The _provider_ of the data, however, is Swissgrid.[^4]  Read on the next
+subsection about the _raw_ time series.
 
-### Swissgrid
+#### Swissgrid time series
+
+The _raw_ time series for the daily aggregated data come from Swissgrid :
 
 > Description from
 [www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads)
@@ -52,13 +95,13 @@ The _provider_ of the data, however, is Swissgrid.[^4]
 > The sum contains all the energy produced and fed in the network.
 > (Only productions plants equipped with load profile meters)
 
-Looking closer at the data provided by Swissgrid
+Looking closer at the _raw_ time series provided by Swissgrid
 in form of Excel spreadsheets [^5]
 their _original_ temporal resolution is **every 15'**[^6].
 
-#### Sample statistics
+##### Sample statistics
 
-Some example statistics from the 2026 data (downloaded on April 21)
+Example statistics from the 2026 Swissgrid data (downloaded on April 21)
 after manually extracting the energy production time series
 from the _Zeitreihen0h15_ sheet
 (starting from `01.01.2026 00:00` up to `31.03.2026 23:45`,
@@ -74,17 +117,21 @@ MWh_sum     MWh_median MWh_mean MWh_stddev MWh_mad
 13100359.20 1375.90    1516.95  573.90     471.09
 ```
 
+### ENTSO-E
+
+[...]
+
 ## Get the data
 
-First, let's retrieve small samples of the data.
+### SFOE
 
-### Download data manually
+#### Download CSV data
 
-The data :
+We download the daily _SFOE_ time series :
 
 [energiedashboard.ch: Stromproduktion Swissgrid-CSV](https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid/resource/0879ba1b-40ea-4e26-bba0-9cbb339f577e)
 
-and a quick-look on the downloaded data
+and have a quick-look on the downloaded data
 
 ``` bash
 mlr --csv head -n 3 ogd104_stromproduktion_swissgrid.csv
@@ -99,7 +146,7 @@ Datum,Energietraeger,Produktion_GWh
 2015-01-01,Photovoltaik,1.2
 ```
 
-### Get data via the Web API
+#### Get JSON data via the Web API
 
 ---
 Input : `https://energiedashboard.ch/api/v1/datasets/stromproduktion-swissgrid/data?from=2026-01-01&offset=0&limit=1000'`  
@@ -107,9 +154,9 @@ Output `stromproduktion.csv`
 
 ---
 
-### Daily electricity production 
+##### Get JSON data 
 
-Following, let's retrieve daily electricity production totals for 2026
+Following, let's retrieve **daily electricity production** totals for 2026
 
 ``` bash
 curl -s -X 'GET'   'https://energiedashboard.ch/api/v1/datasets/stromproduktion-swissgrid/data?from=2026-01-01&offset=0&limit=1000'   -H 'accept: application/json'   > stromproduktion.json
@@ -125,7 +172,7 @@ _This will return a large one-liner_ :
 
 `data.1.datum=2026-03-13,data.1.energietraeger=Thermische,data.1.produktion_gwh=8.6,...`
 
-### Convert data to CSV
+##### Convert JSON to CSV
 
 Now, convert `stromproduktion.json` to CSV (new file named `stromproduktion.csv`) : 
 
@@ -142,6 +189,15 @@ then skip-trivial-records \
 stromproduktion.json \
 > stromproduktion.csv
 ```
+
+
+#### Verify integrity ?
+
+---
+Input : `stromproduktion.csv`, `ogd104_stromproduktion_swissgrid.csv`  
+Output : -
+
+---
 
 We _compare_ the Web-API retrieved data
 `stromproduktion.csv`
@@ -191,7 +247,9 @@ Thermische,1152.1000000000004
 Wind,57.300000000000004
 ```
 
-### Convert unit/s to GWh
+#### Work with a sample ?
+
+> ___Skip this section if working with a small sample is not of concern.___
 
 ---
 Input : `stromproduktion.csv`  
@@ -222,26 +280,56 @@ stromproduktion_2026_01.csv
 > stromproduktion_2026_01_GWh.csv
 ```
 
-### ENTSO-E
-
-The full directory of the ENTSO-E data
-can be fetched from the **File Library** of the Transparency Platform :
-
-    File Browser Mode > TP_export > AggregatedGenerationPerType_16.1.B_C_r3
-
-These files are (TSV and not CSV, yet they are)
-consistent in terms of their header, i.e.
+#### Convert to wide table
 
 ``` bash
-DateTime(UTC)	ResolutionCode	AreaCode	AreaDisplayNameAreaTypeCode	AreaMapCode	ProductionType	ActualGenerationOutput[MW]	ActualConsumption[MW]	UpdateTime(UTC)
+mlr --csv \
+sort -f datum,energietraeger \
+then nest --implode --values --across-fields -f energietraeger \
+stromproduktion.csv \
+| mlr --csv rename datum,Date \
+then reshape -s energietraeger,Produktion_GWh \
+> stromproduktion_wide.csv
+```
+
+
+### ENTSO-E
+
+#### Manual download
+
+The full directory of the ENTSO-E data
+can be downloaded manually
+from the **File Library** of the Transparency Platform :
+
+**File Browser Mode** > **TP_export** > `AggregatedGenerationPerType_16.1.B_C_r3`
+
+These files are (TSV and not CSV, yet they are)
+consistent in terms of their header,
+i.e. the data-columns are :
+
+``` bash
+DateTime(UTC)
+ResolutionCode
+AreaCode
+AreaDisplayNameAreaTypeCode
+AreaMapCode
+ProductionType
+ActualGenerationOutput[MW]
+ActualConsumption[MW]
+UpdateTime(UTC)
 ```
 
 In addition, the timestamps are all in UTC.
 While the downloaded `.zip` file
 (which is the complete folder with monthly time series per file)
 is larg (~690MB) and needs some filtering to extract data for Switzerland.
-Yet it is perhaps cleaner than the files downloaded via interactive map
-(@ https://transparency.entsoe.eu/generation/actual/perType/generation?appState=%7B%22sa%22%3A%5B%22BZN%7C10YGR-HTSO-----Y%22%5D%2C%22st%22%3A%22BZN%22%2C%22mm%22%3Atrue%2C%22ma%22%3Afalse%2C%22sp%22%3A%22HALF%22%2C%22dt%22%3A%22CHART%22%2C%22df%22%3A%5B%222026-04-30%22%2C%222026-04-30%22%5D%2C%22tz%22%3A%22UTC%22%7D).
+
+> * This dataset is perhaps cleaner than files downloaded via the interactive map
+@ [https://transparency.entsoe.eu/generation/actual/perType/generation?appState=%7B%22sa%22%3A%5B%22BZN%7C10YGR-HTSO-----Y%22%5D%2C%22st%22%3A%22BZN%22%2C%22mm%22%3Atrue%2C%22ma%22%3Afalse%2C%22sp%22%3A%22HALF%22%2C%22dt%22%3A%22CHART%22%2C%22df%22%3A%5B%222026-04-30%22%2C%222026-04-30%22%5D%2C%22tz%22%3A%22UTC%22%7D](https://transparency.entsoe.eu/generation/actual/perType/generation?appState=%7B%22sa%22%3A%5B%22BZN%7C10YGR-HTSO-----Y%22%5D%2C%22st%22%3A%22BZN%22%2C%22mm%22%3Atrue%2C%22ma%22%3Afalse%2C%22sp%22%3A%22HALF%22%2C%22dt%22%3A%22CHART%22%2C%22df%22%3A%5B%222026-04-30%22%2C%222026-04-30%22%5D%2C%22tz%22%3A%22UTC%22%7D).
+
+Some metadata for `AggregatedGenerationPerType_16.1.B_C_r3` are available at
+
+[Transparency Platform > Specifications > File Library extracts > AggregatedGenerationPerType-16-1-B-C-r3](https://transparencyplatform.zendesk.com/hc/en-us/articles/36493702227729-AggregatedGenerationPerType-16-1-B-C-r3)
 
 ---
 Input : `2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode.csv`  
@@ -250,46 +338,181 @@ Output : `entsoe_GWh.csv`
 
 ---
 
-Extract data for Switzerland
+#### Extract data for Switzerland
 
-``` bash
+```
 mlr --t2c \
 filter '$AreaMapCode == "CH"' \
-then cat 2026_01_AggregatedGenerationPerType_16.1.B_C_r3.csv \
-> 2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv
+then sort -f "DateTime(UTC)" \
+*_AggregatedGenerationPerType_16.1.B_C_r3.csv \
+> AggregatedGenerationPerType_16.1.B_C_r3_CH.csv
 ```
 
-and convert units to GWh
+#### Convert MWh to GWh
+
+and convert units to GWh while keeping only the columns : 
+`DateTime(UTC)`, `ProductionType` and `Generation_GWh`
 
 ``` bash
 mlr --csv \
-stats1 -a sum -f ActualGenerationOutput[MW] -g ProductionType \
-then put '$Production_GWh = ${ActualGenerationOutput[MW]_sum} / 1000'  \
-then cut -f ProductionType,Production_GWh \
-2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH.csv \
-> 2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH_GWh.csv
+put '$Generation_GWh = ${ActualGenerationOutput[MW]} / 1000'  \
+then cut -f "DateTime(UTC)",ProductionType,Generation_GWh \
+then rename "DateTime(UTC),DateTime,ProductionType,Type"  \
+AggregatedGenerationPerType_16.1.B_C_r3_CH.csv \
+> entsoe_aggregated_generation_per_type_GWh.csv
 ```
 
-## Link SFOE to ENTSO-E data
 
-Map SFOE to ENTSOE _Production Type_
+#### Convert to wide table
 
-It is required to understand
-the correspondence between SFOE and ENTSOE energy production types.
+##### Diagnose the data structure
 
-| SFOE          | ENTSOE                          |
-|---------------|---------------------------------|
-| Speicherkraft | Hydro Pumped Storage            |
-| Flusskraft    | Hydro Run-of-river and poundage |
-| Speicherkraft | Hydro Water Reservoir           |
-| Kernkraft     | Nuclear                         |
-| Photovoltaik  | Solar                           |
-| Wind          | Wind Onshore                    |
+First we take a look at the uniue _types_ and their _counts_
 
+``` bash
+mlr --csv uniq -c -f Type entsoe_aggregated_generation_per_type_GWh.csv
+```
+```
+Type,count
+Solar,99286
+Wind Onshore,99262
+Fossil Gas,6215
+Nuclear,95013
+Hydro Pumped Storage,94941
+Hydro Water Reservoir,94941
+Hydro Run-of-river and poundage,92206
+```
+
+The *problem* is that the ENTSO-E time series are sparse.
+The counts show that not every `DateTime` has data for every `Type`
+(e.g., Solar appears 99k times vs. Fossil Gas only 6k).
+In other words, the *problem* is that the ENTSO-E time series are sparse.
+What is required, however, is a standard CSV with all types as columns,
+even where data is absent.
+
+##### Unsparsify the data
+
+A `nest` operation will create varying field sets per row
+(e.g. `DateTime,Solar` vs `DateTime,Fossil Gas,Solar`),
+breaking the CSV's schema consistency.
+The solution is to `unsparsify` the data after `nest` (or after `reshape`)
+to fill missing fields with empty strings,
+creating a consistent schema across all rows.
+
+##### Reshape to wide table
+
+``` bash
+mlr --csv \
+sort -f DateTime,Type \
+then nest --implode --values --across-fields -f Type entsoe_aggregated_generation_per_type_GWh.csv \
+| mlr --csv \
+reshape -s Type,Generation_GWh \
+then unsparsify \
+> entsoe_hourly_generation_per_type.csv
+```
+
+> **How it works**
+>
+> Miller streams data record after record.
+> Hence, we can `nest`, then `reshape` and finally `unsparsify`
+> which will process each row to ensure internal consistency.
+>
+> - `nest --implode --values --across-fields -f Type` : pivots types into columns per DateTime, but sparsely.
+> - `unsparsify` : adds missing type columns so every row has identical `Type` fields (`Solar`, `Wind Onshore`, etc.).
+> - `reshape -s Type,Generation_GWh` sees stable input headers and outputs pivoted DateTime rows with Solar_Generation_GWh, Wind Onshore_Generation_GWh, etc..
+
+Finally, our reshaped time series look as follows
+(showing 3 lines from the `head` and `tail` of the data) : 
+
+``` bash
+mlr --c2m head -n 3 entsoe_hourly_generation_per_type.csv
+```
+| DateTime            | Solar                   | Wind Onshore | Fossil Gas | Nuclear | Hydro Pumped Storage | Hydro Water Reservoir | Hydro Run-of-river and poundage |
+| ---                 | ---                     | ---          | ---        | ---     | ---                  | ---                   | ---                             |
+| 2014-12-30 23:00:00 | 0.000029999999999999997 |              |            |         |                      |                       |                                 |
+| 2014-12-31 00:00:00 | 0.00005                 |              |            |         |                      |                       |                                 |
+| 2014-12-31 01:00:00 | 0.00007000000000000001  |              |            |         |                      |                       |                                 |
+
+
+
+``` bash
+mlr --c2m tail -n 3 entsoe_hourly_generation_per_type.csv
+```
+| DateTime | Solar | Wind Onshore | Fossil Gas | Nuclear | Hydro Pumped Storage | Hydro Water Reservoir | Hydro Run-of-river and poundage |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-04-29 17:00:00 | 0.379468231 | 0.027049998999999998 |  | 2.5298000000000003 | 3.2977 | 2.31515 | 1.7917299800000002 |
+| 2026-04-29 18:00:00 | 0.032936542000000006 | 0.0287 |  | 2.5335199999999998 | 3.54215 | 2.37668 | 1.794550048 |
+| 2026-04-29 19:00:00 | 0 | 0.030600000000000002 |  |  |  |  | 1.7973499750000002 |
+
+
+## SFOE vs ENTSOE
+
+### Link SFOE and ENTSO-E data
+
+Part of the preparative steps
+is to understand the correspondence between definitions of energy generation types
+in the SFOE and ENTSO-E time series.
+
+
+#### Electricity generation types
+
+The electricity generation types in 
+
+- the _daily_ SFOE time series are :
+
+    ```bash
+    mlr --csv uniq -f Energietraeger ogd104_stromproduktion_swissgrid.csv
+    ```
+    ```
+    Energietraeger
+    Flusskraft
+    Kernkraft
+    Photovoltaik
+    Speicherkraft
+    Thermische
+    Wind
+    ```
+
+- the _hourly_ ENTSO-E time series are :
+
+    ``` bash
+    mlr --csv sort -f Type then uniq -f Type entsoe_aggregated_generation_per_type_GWh.csv
+    ```
+    ```
+    Type
+    Fossil Gas
+    Hydro Pumped Storage
+    Hydro Run-of-river and poundage
+    Hydro Water Reservoir
+    Nuclear
+    Solar
+    Wind Onshore
+    ```
+
+#### Mapping ENTSO-E to SFOE types
+
+Mapping the ENTSO-E _types_ to the SFOE ones in one table :
+
+<!-- layed out in the column `Produktion_GWh` by SFOE to ENTSO-E _Production Type_ -->
+
+
+| ENTSO-E                         | SFOE          |
+|---------------------------------|---------------|
+| Fossil Gas                      | Thermische    |
+| Hydro Pumped Storage            | Speicherkraft |
+| Hydro Run-of-river and poundage | Flusskraft    |
+| Hydro Water Reservoir           | Speicherkraft |
+| Nuclear                         | Kernkraft     |
+| Solar                           | Photovoltaik  |
+| Wind Onshore                    | Wind          |
+
+
+and applying this mapping with Miller's help
 
 ``` bash
 mlr --csv put '
   begin {
+    @map["Fossil Gas"] = "Thermische";
     @map["Hydro Pumped Storage"] = "Speicherkraft";
     @map["Hydro Run-of-river and poundage"] = "Flusskraft";
     @map["Hydro Water Reservoir"] = "Speicherkraft";
@@ -297,11 +520,17 @@ mlr --csv put '
     @map["Solar"] = "Photovoltaik";
     @map["Wind Onshore"] = "Wind"
   }
-  $MatchType = @map[$ProductionType]
+  $MatchType = @map[$Type]
 ' \
-then rename ProductionType,Type \
-2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode_CH_GWh.csv \
-> entsoe_GWh.csv
+entsoe_aggregated_generation_per_type_GWh.csv \
+> entsoe_aggregated_generation_per_type_mapping_to_sfoe_GWh.csv`
+```
+
+``` bash
+mlr --csv \
+filter 'strptime($DateTime, "%Y-%m-%d %H:%M:%S") >= strptime("2015-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")' \
+entsoe_aggregated_generation_per_type_mapping_to_SFOE_GWh.csv \
+> entsoe_hourly_generation_per_type_mapping_to_SFOE_GWh.csv
 ```
 
 Print to verify output
@@ -320,10 +549,7 @@ Solar                           78.36          Photovoltaik
 Wind Onshore                    17.99          Wind
 ```
 
-
-## Compare SFOE vs ENTSOE data
-
-Now we can compare the two "sources" (daily and hourly)
+Now we can compare the _daily_ (SFOE) and _hourly_ (ENTSO-E) time series
 and verify they refer to the same quantities.
 
 Let's generate a file for all production types (?)
@@ -340,23 +566,7 @@ then put '
 > type_and_production.csv
 ```
 
-Now print
-
-``` bash
-mlr --csv cat type_and_production.csv
-```
-
-```
-SFOE_Type,ENTSOE_Type,DailyProduction_GWh,HourlyProduction_GWh,Absolute_difference,Relative_difference
-Speicherkraft,Hydro Pumped Storage,2177.1000000000004,750.0662699999997,1427.0337300000006,65.54745900509853
-Flusskraft,Hydro Run-of-river and poundage,706.0999999999999,661.7663986239978,44.33360137600209,6.278657608837573
-Speicherkraft,Hydro Water Reservoir,2177.1000000000004,992.9575699999995,1184.1424300000008,54.390814845436616
-Kernkraft,Nuclear,1454.1000000000001,1458.4139899999996,-4.313989999999421,-0.2966776700364088
-Photovoltaik,Solar,205.89999999999998,78.35501765500003,127.54498234499995,61.945110415250106
-Wind,Wind Onshore,17.999999999999996,17.98906078800001,0.010939211999986043,0.06077339999992247
-```
-
-or prettier print via `--c2p`
+Now pretty-print via `--c2p`
 
 ``` bash
 mlr --c2p cat type_and_production.csv
@@ -374,7 +584,7 @@ Photovoltaik  Solar                           205.89999999999998   78.3550176550
 Wind          Wind Onshore                    17.999999999999996   17.98906078800001     0.010939211999986043 0.06077339999992247
 ```
 
-or in Markdown
+or in Markdown and figures limited to two decimal digits
 
 ``` bash
 mlr --csv --omd --ofmt '%.2f' cat type_and_production.csv
@@ -396,7 +606,7 @@ mlr --csv --omd --ofmt '%.2f' cat type_and_production.csv
 Two of the _Hydro_ types among the ENTSOE classification _belong_ to SFOE's
 _Speicherkraft_ !  Let's try to combine them.
 
-### Production of "Speicherkraft" only
+#### "Speicherkraft" production
 
 ---
 Input : `type_and_production.csv`  
@@ -404,7 +614,7 @@ Output : `type_and_production_Speicherkraft_Hourly_Production.csv`
 
 ---
 
-Genrate the data
+Generate the data
 
 ``` bash
 mlr --csv filter '$SFOE_Type == "Speicherkraft"' \
@@ -416,13 +626,13 @@ type_and_production.csv \
 
 ```
 
-and print
+and print via
 
 ``` bash
 mlr --c2p --ofmt '%.2f' cat type_and_production_Speicherkraft_Hourly_Production.csv
 ```
 
-returns
+which returns
 
 ```
 SFOE_Type     ENTSOE_Type                             Hourly_Production_GWh_sum
@@ -430,7 +640,7 @@ Speicherkraft Hydro: Pumped Storage + Water Reservoir 1743.02
 ```
 
 
-### Production without "Speicherkraft"
+#### Production without "Speicherkraft"
 
 ---
 Input : `type_and_production.csv`  
@@ -463,7 +673,7 @@ Wind         Wind Onshore                    18.00                17.99         
 ```
 
 
-### Bring back the `DailyProduction_GWh`
+#### Restore lost field `DailyProduction_GWh`
 
 ---
 Input :  `type_and_production.csv`, `type_and_production_Speicherkraft_Hourly_Production.csv`  
@@ -531,19 +741,6 @@ mlr --c2p --ofmt '%.2f' --omd cat type_and_production_harmonised.csv
 | Speicherkraft | Hydro: Pumped Storage + Water Reservoir | 2177.10 | 1743.02 | 434.08 | 19.94 |
 | Wind | Wind Onshore | 18.00 | 17.99 | 0.01 | 0.06 |
 
-
-## Convert time series to wide CSV
-
-*SFOE*
-
-```
-mlr --csv   sort -f datum,energietraeger   then nest --implode --values --across-fields -f energietraeger   stromproduktion.csv | mlr --csv rename datum,Date then reshape -s energietraeger,Produktion_GWh > stromproduktion_wide.csv
-```
-
-*ENTSO-E*
-```
-mlr --csv   cut -x -f UpdateTime then sort -f DateTime,Type   then nest --implode --values --across-fields -f Type   data/entsoe_generation_per_type_2026_01.csv   | mlr --csv reshape -s Type,Generation_MW > data/entsoe_generation_per_type_wide_2026_01.csv
-```
 
 ## Compare hourly to daily
 
