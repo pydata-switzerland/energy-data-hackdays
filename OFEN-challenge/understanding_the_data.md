@@ -1,75 +1,208 @@
-# Electricity production data
+# Hourly Energy Production for Switzerland
 
 <!-- vim-markdown-toc Marked -->
 
-* [The challenge](#the-challenge)
-* [The Data](#the-data)
-    * [SFOE](#sfoe)
-        * [Swissgrid time series](#swissgrid-time-series)
-            * [Sample statistics](#sample-statistics)
-    * [ENTSO-E](#entso-e)
-* [Get the data](#get-the-data)
-    * [SFOE](#sfoe)
-        * [Download CSV data](#download-csv-data)
-        * [Get JSON data via the Web API](#get-json-data-via-the-web-api)
-            * [Get JSON data](#get-json-data)
-            * [Convert JSON to CSV](#convert-json-to-csv)
+* [In short](#in-short)
+    * [The challenge](#the-challenge)
+    * [Importance](#importance)
+    * [The problem](#the-problem)
+    * [Task & Requirements](#task-&-requirements)
+* [Data](#data)
+    * [SFOE daily time series](#sfoe-daily-time-series)
+        * [Understand the SFOE data](#understand-the-sfoe-data)
+        * [Download](#download)
+            * [CSV data](#csv-data)
+            * [JSON data via the Web API](#json-data-via-the-web-api)
+                * [Get JSON data](#get-json-data)
+                * [Convert JSON to CSV](#convert-json-to-csv)
         * [Verify integrity ?](#verify-integrity-?)
         * [Work with a sample ?](#work-with-a-sample-?)
         * [Convert to wide table](#convert-to-wide-table)
-    * [ENTSO-E](#entso-e)
+    * [Swissgrid](#swissgrid)
+        * [Understand the Swissgrid data](#understand-the-swissgrid-data)
+            * [Sample statistics](#sample-statistics)
+    * [ENTSO‑E hourly time series](#entso‑e-hourly-time-series)
+        * [Understand the ENTSO-E data](#understand-the-entso-e-data)
         * [Manual download](#manual-download)
+            * [Other sources ?](#other-sources-?)
         * [Extract data for Switzerland](#extract-data-for-switzerland)
         * [Convert MWh to GWh](#convert-mwh-to-gwh)
         * [Convert to wide table](#convert-to-wide-table)
             * [Diagnose the data structure](#diagnose-the-data-structure)
             * [Unsparsify the data](#unsparsify-the-data)
             * [Reshape to wide table](#reshape-to-wide-table)
-* [SFOE vs ENTSOE](#sfoe-vs-entsoe)
-    * [Link SFOE and ENTSO-E data](#link-sfoe-and-entso-e-data)
-        * [Electricity generation types](#electricity-generation-types)
-        * [Mapping ENTSO-E to SFOE types](#mapping-entso-e-to-sfoe-types)
-    * [Further _cleaning_](#further-_cleaning_)
+    * [Compare time series](#compare-time-series)
+        * [SFOE vs Swissgrid](#sfoe-vs-swissgrid)
+        * [SFOE vs ENTSOE](#sfoe-vs-entsoe)
+            * [Link SFOE and ENTSO-E data](#link-sfoe-and-entso-e-data)
+            * [Electricity generation types](#electricity-generation-types)
+            * [Mapping ENTSO-E to SFOE types](#mapping-entso-e-to-sfoe-types)
+    * [Further](#further)
+* [> ___Stuff to clean-up___](#>-___stuff-to-clean-up___)
         * ["Speicherkraft" production](#"speicherkraft"-production)
         * [Production without "Speicherkraft"](#production-without-"speicherkraft")
         * [Restore lost field `DailyProduction_GWh`](#restore-lost-field-`dailyproduction_gwh`)
     * [Combine in one data file](#combine-in-one-data-file)
 * [Compare hourly to daily](#compare-hourly-to-daily)
+* [Methods](#methods)
+    * [Split by technology](#split-by-technology)
+        * [Nuclear](#nuclear)
+        * [Water](#water)
+        * [Solar](#solar)
+        * [Wind](#wind)
+        * [Thermal](#thermal)
+    * [Temporal disaggregation / benchmarking](#temporal-disaggregation-/-benchmarking)
+    * [Profile‑based scaling](#profile‑based-scaling)
+        * [Validation](#validation)
+        * [Limitations](#limitations)
+    * [References & Links](#references-&-links)
+* [Tooling](#tooling)
+* [Web](#web)
+* [Source code](#source-code)
+* [Benchmarking](#benchmarking)
+    * [Prepare](#prepare)
+    * [Benchmarking](#benchmarking)
+    * [Evaluate](#evaluate)
+        * [How big is the shift](#how-big-is-the-shift)
+            * [Difference](#difference)
+            * [Absolute and relative errors](#absolute-and-relative-errors)
+                * [Mean and median](#mean-and-median)
+                * [Spread and outliers](#spread-and-outliers)
+                * [Shape metrics](#shape-metrics)
 * [Unsorted...](#unsorted...)
+* [> ___Stuff to clean-up___](#>-___stuff-to-clean-up___)
 * [References](#references)
 
 <!-- vim-markdown-toc -->
+
+Prototyping to understand the data for the challenge owned by the Swiss Federal
+Office of Energy (SFOE).
+
+---
 
 > **Under heavy development !**
 
 ---
 
-Prototyping to understand the data for the challenge
-owned by the Swiss Federal Office of Energy (SFOE).
+## In short
 
+### The challenge
 
-## The challenge
+The goal is to estimate
+the **hourly electricity generation by technology** for Switzerland 
+in a consistent way.
+
+---
 
 > From [https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland](https://www.energydatahackdays.ch/challenges/estimating-hourly-energy-production-for-switzerland)
-*The Swiss Federal Office of Energy currently publishes electricity production
 
+>*The Swiss Federal Office of Energy currently publishes electricity production
 data on a daily level across multiple technologies such as hydro, nuclear,
 thermal, wind and PV. However, with the increasing share of renewable and
 variable energy sources, hourly resolution becomes crucial to better understand
 system dynamics. While hourly production data is available from the ENTSO-E
 Transparency Platform, it is not directly aligned with the official daily
 totals published by the SFOE.*
-
-*The goal of this challenge is to ***combine these
+>
+> *The goal of this challenge is to ***combine these
 data sources and develop a method to estimate hourly electricity production per
 technology in a consistent way***. Participants will explore how ENTSO-E hourly
 profiles can be scaled or adjusted to match SFOE's daily totals. The challenge
 is to ensure that the resulting time series is both physically plausible and
 methodologically transparent.*
 
-## The Data
+---
 
-### SFOE
+### Importance
+
+- Policy and LCA applications need **hourly mix and emissions**, not just annual or daily averages.
+- See also : https://en.wikipedia.org/wiki/Electricity_sector_in_Switzerland
+
+
+### The problem
+
+The Swiss Federal Office for Energy (SFOE)
+publishes **reliable**  **daily** energy production time series by technology,
+however not **complete hourly breakdowns**. [^]
+
+The European Network of Transmission System Operators for Electricity (ENTSO-E)
+transparency platform (and Swissgrid ?) provide **hourly data**,
+but with **different categorizations**, **gaps**, **revisions**,
+and cross‑border trades
+that make them incompatible with SFOE aggregates “as is”.
+
+---
+See also : 
+
+> Methodology on the EnergieTakt Karte [^EnergieTakt]
+
+> CH: The Swiss electricity generation data published via ENTSO-E 
+covers _only large power plants_ with an installed capacity of `>100` MW.
+> Smaller power plants are not included.
+> In addition to the ENTSO-E data,
+> the Swiss TSO (Swissgrid) publishes quarter-hourly data on total generation
+> as well as final and total consumption for Switzerland [3],
+> and their subsidiary Pronovo publishes a very detailed quarter-hourly breakdown of renewable generation [4].
+> These data are not provided in realtime but
+> typically around the 15th of each month for the prior month.
+> Using the datasets by Swissgrid and Pronovo,
+> we calculate an estimate for the remaining unreported generation.
+> By comparison with aggregated data from other sources (e.g. SFOE),
+> we concluded that _the remaining generation is mainly from small hydro power plants_.
+> Therefore, we classify it under ‘Hydro’.
+> Furthermore, the difference between final and total consumption in the Swissgrid dataset
+> is utilized to estimate the energy consumed by hydro pumped storage charging.
+> Herein, we account for a 6% share to represent grid losses and in-house consumption by power plants.
+
+[^EnergieTakt]: https://www.energietakt.com/methodology-of-the-energietakt-karte
+
+---
+
+### Task & Requirements
+
+Estimate physically plausible and consistent high-frequency (hourly) profiles
+of electricity generation in a methodologically transpaent way.
+
+The new hourly time series should :
+
+- base their intra-day shape on the ENTSO-E high-frequency hourly electricity generation profiles
+- are consistent with the magnitude/level of the official SFOE daily totals by technology
+- align with physical and statistical constraints
+- are non‑negativity, feature plausible ramps, (and... water balance for hydro)
+- build with open code and reproducible pipelines
+- are supported by clear documentation of assumptions and uncertainty.
+
+[github](https://github.com/SaM-92/energy-data-entsoe)
+
+
+## Data
+
+### SFOE daily time series
+
+SFOE provides the most trustworthy Swiss reference data
+(closer to the statistical truth)
+on energy production and consumption,
+however at a **lower frequency**.[^3]
+
+  - daily or monthly electricity generation by technology :
+    - Hydro run‑of‑river, reservoir
+    - Nuclear
+    - Fossil Gas
+    - Solar
+    - Wind
+
+
+**Sources**
+
+- https://opendata.swiss/fr/dataset/schweizerische-statistik-der-erneuerbaren-energien
+- https://opendata.swiss/fr/dataset/schweizerische-gesamtenergiestatistik
+- https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid
+- https://opendata.swiss/en/dataset/energiedashboard-ch-stromproduktion-swissgrid/resource/0879ba1b-40ea-4e26-bba0-9cbb339f577e
+- https://www.bfe.admin.ch/bfe/en/home/supply/statistics-and-geodata/energy-statistics.html
+- SCHWEIZERISCHE ELEKTRIZITÄTS STATISTIK 2024
+- GESAMTE ERZEUGUNG UND ABGABE ELEKTRISCHER ENERGIE IN DER SCHWEIZ
+
+#### Understand the SFOE data
 
 > Source : https://www.energiedashboard.admin.ch/strom/produktion
 
@@ -82,50 +215,9 @@ in the form of comma-separated-values[^3].
 The _provider_ of the data, however, is Swissgrid.[^4]  Read on the next
 subsection about the _raw_ time series.
 
-#### Swissgrid time series
+#### Download
 
-The _raw_ time series for the daily aggregated data come from Swissgrid :
-
-> Description from
-[www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads)
-
-> The total of the produced energy in the control block Switzerland.
-> The aggregations of the feed-in sequences for the balancing groups
-> are sent from the distribution network operators to Swissgrid.
-> The sum contains all the energy produced and fed in the network.
-> (Only productions plants equipped with load profile meters)
-
-Looking closer at the _raw_ time series provided by Swissgrid
-in form of Excel spreadsheets [^5]
-their _original_ temporal resolution is **every 15'**[^6].
-
-##### Sample statistics
-
-Example statistics from the 2026 Swissgrid data (downloaded on April 21)
-after manually extracting the energy production time series
-from the _Zeitreihen0h15_ sheet
-(starting from `01.01.2026 00:00` up to `31.03.2026 23:45`,
-here saved as : `total_energy_production_swissgrid.csv`) :
-
-``` bash
-mlr --c2p --ofmt '%.2f' \
-put '$MWh = $kWh / 1000' \
-then stats1 -a sum,median,mean,stddev,mad -f MWh \
-total_energy_production_swissgrid.csv
-
-MWh_sum     MWh_median MWh_mean MWh_stddev MWh_mad
-13100359.20 1375.90    1516.95  573.90     471.09
-```
-
-### ENTSO-E
-
-[...]
-
-## Get the data
-
-### SFOE
-
-#### Download CSV data
+##### CSV data
 
 We download the daily _SFOE_ time series :
 
@@ -146,7 +238,7 @@ Datum,Energietraeger,Produktion_GWh
 2015-01-01,Photovoltaik,1.2
 ```
 
-#### Get JSON data via the Web API
+##### JSON data via the Web API
 
 ---
 Input : `https://energiedashboard.ch/api/v1/datasets/stromproduktion-swissgrid/data?from=2026-01-01&offset=0&limit=1000'`  
@@ -154,7 +246,7 @@ Output `stromproduktion.csv`
 
 ---
 
-##### Get JSON data 
+###### Get JSON data 
 
 Following, let's retrieve **daily electricity production** totals for 2026
 
@@ -172,7 +264,7 @@ _This will return a large one-liner_ :
 
 `data.1.datum=2026-03-13,data.1.energietraeger=Thermische,data.1.produktion_gwh=8.6,...`
 
-##### Convert JSON to CSV
+###### Convert JSON to CSV
 
 Now, convert `stromproduktion.json` to CSV (new file named `stromproduktion.csv`) : 
 
@@ -293,7 +385,106 @@ then reshape -s energietraeger,Produktion_GWh \
 ```
 
 
-### ENTSO-E
+
+### Swissgrid
+
+Swiss TSO data[^Swissgrid]
+
+Swissgrid :
+
+- is the electricity grid operator in Switzerland
+- publishes total **hourly** (even **quarter-hourly**) electricity production
+  (including consumption, load, and imports/exports)
+- is source for SFOE's daily time series
+  > _though Swissgrid is not mentioned in the Challenge_ !
+
+
+The quarter-hourly/horly time series can be used to verify totals
+
+Unfortunately, this data :
+
+  - is not real-time
+  - is not separated in production categories
+  
+[^Swissgrid]: https://www.swissgrid.ch/en/home/operation/grid-data/generation.html
+
+[^1]: https://www.entsoe.eu/data/power-stats/
+[^2]: https://www.swissgrid.ch/en/home/operation/grid-data/generation.html
+[^3]: https://www.swissgrid.ch/en/home/customers/topics/energy-data-ch.html
+[^4]: https://miller.readthedocs.io/en/latest/manpage/
+[^16]: https://www.elibrary.imf.org/display/book/9781475589870/ch006.xml
+[^17]: https://arxiv.org/html/2503.22054v1
+
+#### Understand the Swissgrid data
+
+The _raw_ time series for the daily aggregated data come from Swissgrid :
+
+> Description from
+[www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads](https://www.swissgrid.ch/en/home/operation/grid-data/generation.html#downloads)
+
+> The total of the produced energy in the control block Switzerland.
+> The aggregations of the feed-in sequences for the balancing groups
+> are sent from the distribution network operators to Swissgrid.
+> The sum contains all the energy produced and fed in the network.
+> (Only productions plants equipped with load profile meters)
+
+Looking closer at the _raw_ time series provided by Swissgrid
+in form of Excel spreadsheets [^5]
+their _original_ temporal resolution is **every 15'**[^6].
+
+##### Sample statistics
+
+Example statistics from the 2026 Swissgrid data (downloaded on April 21)
+after manually extracting the energy production time series
+from the _Zeitreihen0h15_ sheet
+(starting from `01.01.2026 00:00` up to `31.03.2026 23:45`,
+here saved as : `total_energy_production_swissgrid.csv`) :
+
+``` bash
+mlr --c2p --ofmt '%.2f' \
+put '$MWh = $kWh / 1000' \
+then stats1 -a sum,median,mean,stddev,mad -f MWh \
+total_energy_production_swissgrid.csv
+
+MWh_sum     MWh_median MWh_mean MWh_stddev MWh_mad
+13100359.20 1375.90    1516.95  573.90     471.09
+```
+
+
+### ENTSO‑E hourly time series
+
+The ENTSO-E transparency platform provides hourly time series
+
+- high-frequency hourly time series by production type
+- provide intra-day profile
+- misses part of the system, especially depending on technology[^4][^1],
+  thus are incomplete or inconsistent.[^1][^2][^3][^electricitymaps-issue-892]
+
+  - ..there are a lot of small hydro plants in
+    Switzerland[^cleantech_small-scale-hydropower-in-switzerland] with a
+    complicated ownership structure..
+  - Hydro & Hydro storage: On average, two third of the total annual output
+    is missing (13.5TWh vs. 36.3 TWh actual cumulated in 2016)
+  - non-nuclear thermal: 100% is missing. (0 vs. 3.1TWh actual in 2016)
+
+- e.g. for _Run-of-river_ less than 2 of the 17.7 TWh are included in the
+  ENTSOE values. This was confirmed by the energy specialists in our team.
+  Switzerland has a lot of small run-of-river plants that are so small that
+  they do not have to report live data, so that this data is not
+  available.[^electricitymaps-issue-2898]
+- Conventional thermal is the other production category that is missing in
+  the data.[^electricitymaps-issue-2898]
+
+[^cleantech_small-scale-hydropower-in-switzerland]: https://www.cleantech-alps.com/wp-content/uploads/2023/11/cleantech_small-scale-hydropower-in-switzerland.pdf
+[^electricitymaps-issue-892]: https://github.com/electricitymaps/electricitymaps-contrib/issues/892
+[^electricitymaps-issue-2898]: https://github.com/electricitymaps/electricitymaps-contrib/pull/2898
+
+
+#### Understand the ENTSO-E data
+
+[...]
+
+> ENTSO-E : European Network of Transmission System Operators for Electricity
 
 #### Manual download
 
@@ -330,6 +521,13 @@ is larg (~690MB) and needs some filtering to extract data for Switzerland.
 Some metadata for `AggregatedGenerationPerType_16.1.B_C_r3` are available at
 
 [Transparency Platform > Specifications > File Library extracts > AggregatedGenerationPerType-16-1-B-C-r3](https://transparencyplatform.zendesk.com/hc/en-us/articles/36493702227729-AggregatedGenerationPerType-16-1-B-C-r3)
+
+
+##### Other sources ?
+
+- [ENTSO-E Hydropower modelling data (PECD) in CSV format](https://zenodo.org/records/3985078) [^DeFelice2020]
+
+[^DeFelice2020]: De Felice, Matteo. “ENTSO-E Hydropower Modelling Data (PECD) in CSV Format”. Zenodo, August 14, 2020. https://doi.org/10.5281/zenodo.3985078.
 
 ---
 Input : `2026_01_AggregatedGenerationPerType_16.1.B_C_r3_AreaMapCode.csv`  
@@ -390,6 +588,19 @@ In other words, the *problem* is that the ENTSO-E time series are sparse.
 What is required, however, is a standard CSV with all types as columns,
 even where data is absent.
 
+---
+
+> Three main types of hydropower plants (HPP) are distinguished:
+> - Storage HPP with at least one headwater reservoir allowing for flexible production according to the variations of the demand and the production from other sources,
+> - Run-of-river HPP (without appreciable storage) whose production directly depends on the inflows, and
+> - Pumped storage plants (PSP) which allow to store large amounts of electric energy by using surplus energy for pumping and releasing energy in times of high demand.
+
+> Source : [Swiss Potential for Hydropower Generation and Storage](https://ethz.ch/content/dam/ethz/special-interest/baug/department/news/dokumente/Hydropower_Synthesis_Report_sm.pdf) [^Boes2021]
+
+[^Boes2021]: Boes, R., Hohermuth, B., Giardini, D. (eds.), Avellan, F., Boes, R, Burlando, P., Evers, F., Felix, D., Hohermuth, B., Manso, P., Münch-Aligné, C., Schmid, M., Stähli, M., Weigt, H. (2021): Swiss Potential for Hydropower Generation and Storage, Synthesis Report, ETH Zurich, 2021.
+
+---
+
 ##### Unsparsify the data
 
 A `nest` operation will create varying field sets per row
@@ -444,17 +655,50 @@ mlr --c2m tail -n 3 entsoe_hourly_generation_per_type.csv
 | 2026-04-29 18:00:00 | 0.032936542000000006 | 0.0287 |  | 2.5335199999999998 | 3.54215 | 2.37668 | 1.794550048 |
 | 2026-04-29 19:00:00 | 0 | 0.030600000000000002 |  |  |  |  | 1.7973499750000002 |
 
+### Compare time series
 
-## SFOE vs ENTSOE
+#### SFOE vs Swissgrid
 
-### Link SFOE and ENTSO-E data
+We compare the total production for a few months given by the SFOE daily series
+
+``` bash
+mlr --csv \
+filter 'strptime($Datum, "%Y-%m-%d") >= strptime("2026-01-01", "%Y-%m-%d") && strptime($Datum, "%Y-%m-%d") <= strptime("2026-03-31", "%Y-%m-%d")' \
+then stats1 -a sum -f Produktion_GWh data/SFOE/ogd104_stromproduktion_swissgrid.csv
+```
+```
+Produktion_GWh_sum
+14148.000000000005
+```
+and the ... by Swissgrid
+
+``` bash
+mlr --csv \
+cut -f "Summe produzierte Energie Regelblock Schweiz Total energy production Swiss controlblock - kWh" \
+then label "Production kWh" \
+then put '${Production GWh} = ${Production kWh} / 1000000' \
+then stats1 -a sum -f "Production GWh" \
+data/clean/EnergieUebersichtCH-2026_production_wide.csv
+```
+```
+Production GWh_sum
+13100.35919622985
+```
+
+Even here the differene is large, which confirms the essence of the problem
+not being else than the lack of a common system to report to, collect and
+harmonise data on the generation of electricity at a national level.
+
+#### SFOE vs ENTSOE
+
+##### Link SFOE and ENTSO-E data
 
 Part of the preparative steps
 is to understand the correspondence between definitions of energy generation types
 in the SFOE and ENTSO-E time series.
 
 
-#### Electricity generation types
+##### Electricity generation types
 
 The electricity generation types in 
 
@@ -489,7 +733,7 @@ The electricity generation types in
     Wind Onshore
     ```
 
-#### Mapping ENTSO-E to SFOE types
+##### Mapping ENTSO-E to SFOE types
 
 Mapping the ENTSO-E _types_ to the SFOE ones in one table :
 
@@ -506,6 +750,27 @@ Mapping the ENTSO-E _types_ to the SFOE ones in one table :
 | Solar                           | Photovoltaik  |
 | Wind Onshore                    | Wind          |
 
+
+
+| SFOE                 | ENTSO‑E                                                                   | Notes / caveats                                                                             |
+| -------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Flusskraft           | Hydro Run-of-river and poundage                                           | Conceptually run‑of‑river; may miss small plants not reported to ENTSO‑E. bfe.admin+2       |
+| Speicherkraft        | Hydro Water Reservoir; Hydro Pumped Storage (gen.)                        | Storage + pumped storage generation; pumping consumption appears as load. bfe.admin+2       |
+| Wasserkraft total    | All three hydro types above                                               | ENTSO‑E for CH only covers plants ≥100 MW; small hydro missing. [^energietakt+1]            |
+| Kernenergie          | Nuclear                                                                   | Fairly straightforward one‑to‑one. entsoe+1                                                 |
+| Fossil / thermisch   | Fossil Brown coal; Fossil Hard coal; Fossil Gas; Fossil Oil; Other fossil | ENTSO‑E CH data historically incomplete for non‑nuclear thermal. github+1                   |
+| Solar (Photovoltaik) | Solar                                                                     | PV mostly aligned between SFOE, Pronovo, ENTSO‑E; check small‑scale coverage. energietakt+1 |
+| Windkraft            | Wind Onshore (and Offshore if any)                                        | Switzerland essentially only onshore. bfe.admin                                             |
+| Übrige erneuerbare   | Biomass; Geothermal; Other renewable                                      | Depends on SFOE grouping for “other renewables”. bfs.admin+1                                |
+
+
+[^energietakt+1]: https://www.energietakt.com/methodology-of-the-energietakt-karte/
+
+> **Assumptions**
+>
+> SFOE Flusskraft + Speicherkraft ≈ sum of ENTSO‑E hydro types, _after correcting for small‑plant under‑coverage_.
+> Flusskraft ≈ ENTSO‑E Run‑of‑river and poundage
+> Speicherkraft ≈ Reservoir + Pumped Storage
 
 and applying this mapping with Miller's help
 
@@ -601,7 +866,11 @@ mlr --csv --omd --ofmt '%.2f' cat type_and_production.csv
 
 
 
-### Further _cleaning_
+### Further
+
+---
+> ___Stuff to clean-up___
+---
 
 Two of the _Hydro_ types among the ENTSOE classification _belong_ to SFOE's
 _Speicherkraft_ !  Let's try to combine them.
@@ -755,7 +1024,7 @@ mlr --c2p cat entsoe_generation_per_type_2026_01_daily.csv
 ```
 Date       Hydro Pumped Storage Hydro Run-of-river and poundage Hydro Water Reservoir Nuclear            Solar              Wind Onshore
 2026-01-01 3364.59              17817.699941999996              7708.32               47089.79           4334.332181        809.929896
-2026-01-02 5767.000000000001    16765.60009                     9181.329999999998     47057.68           2157.0237300000003 835.6943990000001
+2026-01-02 5767.000000000001    16765.           9181.329999999998     47057.68           2157.0237300000003 835.6943990000001
 2026-01-03 4405.989999999999    16534.200003                    8222.769999999999     47116.420000000006 1448.9675039999997 336.28556
 2026-01-04 6638.249999999999    16698.60009                     17522.770000000004    47140.840000000004 2172.514831        86.41189899999998
 2026-01-05 60718.909999999996   22843.999988999993              53405.200000000004    47120.87           1870.561648        120.863572
@@ -787,9 +1056,222 @@ Date       Hydro Pumped Storage Hydro Run-of-river and poundage Hydro Water Rese
 2026-01-31 4821.78              18362.100029999998              11256.730000000001    47112.96           3030.033892000001  92.463528
 ```
 
+
+## Methods  
+
+### Split by technology
+
+Given the _source_ mismatch is **technology-specific** and not uniform
+it rather better to work out the challenge by type,
+namely : water, nuclear, river, storage, wind, solar, thermal.
+
+#### Nuclear
+
+Use the high-frequency nuclear series directly as indicator and benchmark it to SFOE daily nuclear totals. This is likely the easiest and cleanest case.[^6][^4]
+
+#### Water
+
+Treat water as the main hard problem. Your current config uses:
+
+- ENTSO-E hourly sum of `Hydro Run-of-river and poundage`, `Hydro Water Reservoir`, and `Hydro Pumped Storage`,[^6]
+- benchmarked to SFOE `Flusskraft + Speicherkraft`.[^6]
+
+This is a useful aggregate baseline, but conceptually you should be careful: **pumped storage generation is not the same thing as conventional hydro production**, so this grouping may be operationally useful but not conceptually clean.[^4][^6]
+
+Better progression:
+
+1. benchmark **river** separately to `Flusskraft`,[^6]
+2. benchmark **storage** separately to `Speicherkraft`,[^6]
+3. keep pumped-storage handling explicit, not hidden inside “water,” unless the challenge definition clearly allows it.[^4]
+
+#### Solar
+
+Use solar hourly shape from ENTSO-E if usable, but weather-based shape may become better. Benchmark to SFOE daily solar. Your current package already supports the simple version.[^7][^6]
+
+#### Wind
+
+Same logic: benchmark hourly wind shape to daily wind totals. For Switzerland this may be small in absolute terms, but still useful.[^7][^6]
+
+#### Thermal
+
+Treat thermal as a difficult residual bucket. Your current config aggregates gas, coal, oil, other, waste into one thermal indicator and benchmarks it to `Thermische Erzeugung`. That is reasonable as a first pass.[^6]
+
+
+### Temporal disaggregation / benchmarking
+
+Reconstruct hourly Swiss electricity production by technology 
+by benchmarking [^benchmarking-and-reconciliation] 
+incomplete high-frequency operational series to official Swiss daily totals,
+using Chow-Lin temporal disaggregation.
+
+  - map low‑frequency totals to high‑frequency series while preserving aggregates.
+  - Denton, Chow‑Lin, Fernandez, related methods
+
+  - the **target** is low-frequency SFOE daily data,[^7][^9]
+  - the **indicator** is high-frequency ENTSO-E-style data,[^6][^7]
+  - the method is **Chow-Lin** by default,[^7]
+  - the output is a benchmarked hourly series plus validation plots/tables.[^9][^10][^7]
+
+That is a solid baseline.[^5][^7]
+
+- Chow-Lin is a batch estimator (looking at the whole month at once)
+
+    - [d-nb](https://d-nb.info/1219272752/34)
+
+    - Requires re-running the entire model every time you add a new data point.
+
+[^benchmarking-and-reconciliation]: https://www.elibrary.imf.org/display/book/9781475589870/ch006.xml
+
+### Profile‑based scaling
+
+  Apply technology‑specific (normalised) hourly profiles
+  and scale to daily totals (baseline / benchmark).
+
+Other ideas :
+
+- [matteodefelice](https://www.matteodefelice.name/post/pypsa-entsoe/)
+
+- **State‑space** and **Kalman‑filter** [^python-time-series-handbook-kalman-filter] based reconciliation
+  for time‑series with multiple noisy sources.
+
+  - the Kalman filter is sequential
+  - suitable for "near-real-time" estimation
+  - allows estimatation at any hour as data arrives
+
+- **Regression / ML with constraints**
+
+  - e.g. penalized regression, gradient boosting,
+  or shallow neural networks with post‑projection to enforce daily sums.
+
+  [matteodefelice](https://www.matteodefelice.name/post/pypsa-entsoe/)
+
+
+#### Validation
+
+Quantitative comparison with whatever hourly data exist
+(ENTSO‑E, Swissgrid, plant‑level or canton‑level samples),
+plus error metrics (MAPE, RMSE, coverage of confidence bands).
+
+
+#### Limitations
+
+..
+
+### References & Links
+
+Mapiam, P. P., Methaprayun, M., Bogaard, T., Schoups, G., and Ten Veldhuis, M.-C.: Citizen rain gauges improve hourly radar rainfall bias correction using a two-step Kalman filter, Hydrol. Earth Syst. Sci., 26, 775–794, https://doi.org/10.5194/hess-26-775-2022, 2022.
+
+[d-nb](https://d-nb.info/1219272752/34)
+
+[^python-time-series-handbook-kalman-filter]: https://filippomb.github.io/python-time-series-handbook/notebooks/07/kalman-filter.html
+
+
+## Tooling  
+
+Existing tools out there
+
+## Web
+
+- https://www.energietakt.eu/karte/?region=DE&mode=EmissionsConsumption&scheme=DC&agg=Hourly&period=72h
+- https://energy-charts.info/charts/power/chart.htm?l=en&c=CH
+- https://github.com/soubhisaad/Swiss-Energy-Analytics-Project-Soubhi-Saad
+
+## Source code
+
+- https://github.com/Jobinjoseph/swissgrid-energy-forecast/blob/main/fetch_latest_data.py
+  | Although the challenge is not about forecasting, this repository has some
+  reusable scripts to fetch and clean time series data from Swissgrid
+
+- **tempdisagg** for Denton / Chow‑Lin style temporal disaggregation. [d-nb](https://d-nb.info/1219272752/34)
+
+- **Kalman Filter**
+  - https://filippomb.github.io/python-time-series-handbook/notebooks/07/kalman-filter.html
+  - https://github.com/pykalman/pykalman
+
+- **pandas / xarray** for time‑series wrangling and multi‑index operations.
+
+- **statsmodels** for state‑space models, regression with time‑series errors. [d-nb](https://d-nb.info/1219272752/34)
+
+- **scikit‑learn / XGBoost / LightGBM** for constrained or post‑processed ML models on hourly data. [infoscience.epfl](https://infoscience.epfl.ch/bitstreams/c525f8ac-409e-4d92-9556-928029f97760/download)
+
+- **pypsa / PyPSA‑Eur** style workflows for power‑system consistent checks and scenario analysis. [matteodefelice](https://www.matteodefelice.name/post/pypsa-entsoe/)
+
+- **entsoe‑py or custom ENTSO‑E API wrappers** to ingest and harmonize ENTSO‑E data. [github](https://github.com/SaM-92/energy-data-entsoe)
+
+- [github](https://github.com/SaM-92/energy-data-entsoe)
+
+(Plus your `energy-bench` / `nrgbnc` tool as an orchestrator around `tempdisagg` and validation.)   
+
+
+
+## Benchmarking
+
+
+### Prepare
+
+..
+
+### Benchmarking
+
+...
+
+### Evaluate
+
+
+#### How big is the shift
+
+Let's compute a few diagnostics to understand the hourly differences:
+
+
+Let
+
+- xtxt​: original hourly series (indicator or pre‑benchmark series)
+
+- y^ty^​t​: Chow–Lin benchmarked hourly series
+
+##### Difference
+
+    dt=y^t−xtdt​=y^​t​−xt​
+
+##### Absolute and relative errors
+
+
+###### Mean and median 
+
+of ∣dt∣∣dt​∣ and ∣dt∣/(xt+ϵ)∣dt​∣/(xt​+ϵ).
+
+###### Spread and outliers
+
+Standard deviation, percentiles (p5, p50, p95) of dtdt​.
+
+###### Shape metrics
+
+Correlation between xtxt​ and y^ty^​t​. High correlation with small relative changes means the Chow–Lin procedure preserved the pattern well.
+
+..
+
+``` bash
+mlr --c2p head validation_summary.csv
+```
+```
+original           target benchmarked        original_minus_target benchmarked_minus_original benchmarked_minus_target
+2023-01-01 20.39372           60.9   60.899999999999956 -40.506280000000004   40.50627999999996          -4.263256414560601e-14
+2023-01-02 31.063499999999998 77.4   77.40000000000002  -46.33650000000001    46.33650000000002          1.4210854715202004e-14
+2023-01-03 43.34521           91.3   91.30000000000004  -47.954789999999996   47.95479000000004          4.263256414560601e-14
+2023-01-04 24.18929           67.7   67.69999999999995  -43.51071             43.510709999999946         -5.684341886080802e-14
+2023-01-05 31.07019           71.7   71.70000000000005  -40.629810000000006   40.62981000000005          4.263256414560601e-14
+2023-01-06 29.708579999999998 67.8   67.79999999999987  -38.09142             38.09141999999987          -1.2789769243681803e-13
+2023-01-07 21.615769999999998 57.1   57.09999999999997  -35.484230000000004   35.484229999999975         -2.842170943040401e-14
+2023-01-08 17.68647           48.0   47.999999999999936 -30.31353             30.313529999999936         -6.394884621840902e-14
+2023-01-09 46.645579999999995 96.0   95.99999999999989  -49.354420000000005   49.35441999999989          -1.1368683772161603e-13
+2023-01-10 40.23751           89.2   89.19999999999986  -48.96249             48.96248999999986          -1.4210854715202004e-13
+```
+
 ## Unsorted...
 
-_Stuff to clean-up_
+---
+> ___Stuff to clean-up___
+---
 
 
 ```
