@@ -8,6 +8,8 @@ from sklearn.metrics import (
 )
 import numpy as np
 
+from sklearn.base import clone
+
 
 def train_test_split(
     features: pd.DataFrame,
@@ -15,7 +17,7 @@ def train_test_split(
     train_fraction: float = 0.7,
     plot=False,
 ):
-    """split the data into train, val and test sets,
+    """split the data into train and test sets,
     according to the given fractions. optionally plot the split.
 
     Args:
@@ -24,7 +26,7 @@ def train_test_split(
         train_fraction (float, optional): fraction of data to use for training. Defaults to 0.7.
         plot (bool, optional): whether to plot the split. Defaults to False.
     Returns:
-        tuple: train, val and test sets for features and targets
+        tuple: train and test sets for features and targets
     """
     X = features
     y = targets
@@ -42,7 +44,7 @@ def train_test_split(
 
     if plot:
         # plot with different colors the targets
-        # in train, val and test sets to check the split
+        # in train and test sets to check the split
 
         fig = plt.figure(figsize=(12, 6))
         for i, target in enumerate(y_train.columns):
@@ -61,7 +63,7 @@ def train_test_split(
             break  # only plot the first target for clarity
         plt.xlabel("Time")
         plt.ylabel("targets")
-        plt.title("Train, Validation, and Test Split")
+        plt.title("Train and Test Split")
         plt.legend()
         fig.show()
 
@@ -102,6 +104,7 @@ def run_CV(
         X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
         y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
 
+        model = clone(model)  # to ensure a fresh model for each fold
         model.fit(X_tr, y_tr)
         y_val_pred = model.predict(X_val)
 

@@ -15,7 +15,7 @@ import plotly.io as pio
 from xgboost import XGBRegressor
 
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
-
+from IPython.display import display
 # %%
 
 from forecasting_utils import train_test_split, test_model, run_CV
@@ -134,7 +134,6 @@ X_train, y_train, X_test, y_test = train_test_split(
 # https://xgboost.readthedocs.io/en/latest/python/python_api.html#module-xgboost.sklearn
 model = XGBRegressor(
     tree_method="hist",
-    random_state=42,
     multi_strategy="multi_output_tree",
     n_estimators=100,
     max_depth=6,
@@ -164,7 +163,7 @@ display(cv_results)
 # ### Hyperparameter tuning with CV
 
 param_grid = {
-    "n_estimators": [50, 70, 100],
+    "n_estimators": [50, 70, 80],
     "max_depth": [6, 8],
     "learning_rate": [0.1],  # from prev. exp.
     # "learning_rate": [0.01, 0.1, 0.2]
@@ -188,7 +187,6 @@ print("Best Hyperparameters:", grid_search.best_params_)
 # ### retrain and test best model
 
 best_model = grid_search.best_estimator_
-best_model.fit(X_train, y_train)
 
 # test the best model on the test set
 test_model(best_model, X_test, y_test, plot=True)
