@@ -13,10 +13,13 @@ dependencies = [
     "ruff>=0.15.11",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
+]
+
+[project.optional-dependencies]
+tetouan = [
     "ucimlrepo>=0.0.7",
     "xgboost>=3.2.0",
 ]
-
 
 [tool.ruff.format]
 preview = true

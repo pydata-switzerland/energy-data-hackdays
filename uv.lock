@@ -171,6 +171,10 @@ dependencies = [
     { name = "ruff" },
     { name = "scikit-learn" },
     { name = "seaborn" },
+]
+
+[package.optional-dependencies]
+tetouan = [
     { name = "ucimlrepo" },
     { name = "xgboost" },
 ]
@@ -185,9 +189,10 @@ requires-dist = [
     { name = "ruff", specifier = ">=0.15.11" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "ucimlrepo", specifier = ">=0.0.7" },
-    { name = "xgboost", specifier = ">=3.2.0" },
+    { name = "ucimlrepo", marker = "extra == 'tetouan'", specifier = ">=0.0.7" },
+    { name = "xgboost", marker = "extra == 'tetouan'", specifier = ">=3.2.0" },
 ]
+provides-extras = ["tetouan"]
 
 [[package]]
 name = "executing"
